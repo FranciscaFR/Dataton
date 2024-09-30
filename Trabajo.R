@@ -12,9 +12,6 @@ library(writexl)
 
 #A continuación, se generarán diferentes regresiones múltiples con las siguientes variaciones:
 # 3 nivel: una a nivel sección electoral, otra a nivel municipal y otra a nivel entidad
-# 2 supervivencia: catalogamos la supervivencia de las farmacias
-  # Todas las farmacias en el último DENUE
-  # Que desaparecieron del DENUE 2021 al DENUE 2024
 #Esto se hará para identificar cuáles son los factores asociados a una mayor densidad de farmacias en cada nivel 
 
 options(scipen = 999999)
@@ -471,5 +468,49 @@ write_xlsx(contar_guadalajara_com, path = "guadalajara.xlsx")
 write_xlsx(contar_ahorro_com, path = "ahorro.xlsx")
 write_xlsx(contar_klyn_com, path = "klyn.xlsx")
 
+recomendaciones_sin_filtro <- read_excel("todas_farm.xlsx") |>
+  mutate(recomenX5 = ahorro_mun_total) |>
+  select(-ahorro_mun_total,-...8,-...9,-...10,-...11,-...12,-...13)
 
+farmacias_para_rec <- farm_mun_cuenta |> select (ENTIDAD, MUNICIPIO, farm_num_mun, geometry)
 
+recomendaciones <- full_join(farmacias_para_rec, recomendaciones_sin_filtro, 
+                           by = c("ENTIDAD"="entidad", "MUNICIPIO"="municipio"))
+recomendaciones <- recomendaciones %>%
+  filter(!is.na(recomenX5) & recomenX5 != "")
+recomendaciones <- recomendaciones %>%
+  filter(!is.na(farm_num_mun) & farm_num_mun != "")
+avg_farm_mun<-mean(recomendaciones$farm_num_mun)*1.3
+#Establecimos el promedio de farmacias por municipio, debajo de esa media (más el 30% para alcanzar la cantidad necesaria de farmacias), sugerimos agregar farmacias según las recomendaciones
+recom_filtradas <- recomendaciones %>%
+  filter(farm_num_mun < avg_farm_mun)
+
+#A continuación, se muestran los mapas 
+
+#Mapa de México
+ggplot()+
+  geom_sf(data = municipios, 
+          color = "gray",
+          fill = "white",
+          size = 0.05)+
+  theme_minimal()
+
+mex_municipios = left_join(municipios, censo, 
+                           by = c("ENTIDAD" = "entidad",
+                                  "MUNICIPIO" = "municipio"))
+
+#Mapa de México con farmacias en cada punto 
+ggplot()+
+  geom_sf(data = mex_municipios, fill = "white", color = "gray")+
+  geom_sf(data = farmacias_2024, color = "#750050", alpha = 0.05, size = 0.5)+
+  theme_minimal()
+
+#Mapa de México con las recomendaciones filtradas
+
+ggplot(data = recom_filtradas) +
+  geom_sf(aes(fill = num_farm), color = "white", size = 0.05) +
+  scale_fill_gradient(low = "lightyellow", high = "darkorange", na.value = "grey90", name = "Número de farmacias") +
+  facet_wrap(~ farmacia) +
+  theme_minimal() +
+  labs(title = "Distribución de farmacias recomendadas",
+       subtitle = "Número de farmacias recomendadas por Municipio y por Farmacia")
